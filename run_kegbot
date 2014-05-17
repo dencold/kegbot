@@ -1,0 +1,48 @@
+#!/bin/bash
+# Runner for kegbot
+
+# Setup some vars
+MYSQL_DATA_DIR=/var/lib/mysql
+KEGBOT_DATA_DIR=/kegbot-data/data
+KEGBOT_SETTINGS_DIR=/kegbot-data/config
+DB_USER=kegbot
+DB_PASS=kegbot_r00t
+
+# setup kegbot mysql user
+if [[ ! -e ${MYSQL_DATA_DIR}/ibdata1 ]]; then
+	echo Creating new Kegbot db user...
+	mysql_install_db
+
+	DEBIAN_MYSQL_PASS=`cat /etc/mysql/debian.cnf | grep password | head -1 | cut -d' ' -f3`
+	DEBIAN_MYSQL_GRANT="GRANT ALL PRIVILEGES ON *.* TO 'debian-sys-maint'@'localhost' IDENTIFIED BY '"$DEBIAN_MYSQL_PASS"'"
+	KEGBOT_MYSQL_GRANT="GRANT ALL PRIVILEGES ON *.* TO '"$DB_USER"'@'localhost' IDENTIFIED BY '"$DB_PASS"'"
+
+	/etc/init.d/mysql start
+	mysqladmin -u root create kegbot
+	mysql -u root -e "$DEBIAN_MYSQL_GRANT"
+	mysql -u root -e "$KEGBOT_MYSQL_GRANT"
+	mysql -u root -e "FLUSH PRIVILEGES"
+
+  	# also switch redis data dir ownership from root to redis
+  	chown redis /var/lib/redis
+fi
+
+# Run kegbot setup script
+if [[ ! -e ${KEGBOT_SETTINGS_DIR} ]]; then
+	echo Seeding initial Kegbot data...
+	setup-kegbot.py --allow_root True \
+		--data_root $KEGBOT_DATA_DIR \
+		--db_database $DB_USER \
+		--db_password $DB_PASS \
+		--db_type mysql \
+		--db_user $DB_USER \
+		--settings_dir $KEGBOT_SETTINGS_DIR \
+		--nointeractive
+fi
+
+# Ensure mysql and redis are up
+/etc/init.d/mysql start
+/etc/init.d/redis-server start
+
+# Finally, run our kegbot server
+KEGBOT_SETTINGS_DIR=$KEGBOT_SETTINGS_DIR kegbot runserver 0.0.0.0:8000
