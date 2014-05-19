@@ -23,6 +23,13 @@ if [[ ! -e ${MYSQL_DATA_DIR}/ibdata1 ]]; then
 	mysql -u root -e "$KEGBOT_MYSQL_GRANT"
 	mysql -u root -e "FLUSH PRIVILEGES"
 
+	# mysql has crappy timezone support, run this to hack in TZ info. See this post:
+	# https://kegbot.org/docs/server/troubleshooting/#date-errors-while-viewing-sessions
+	# note that you'll get back two warnings that look like:
+	# Warning: Unable to load '/usr/share/zoneinfo/iso3166.tab' as time zone. Skipping it.
+	# this is safe to ignore.
+	mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -u root mysql
+
   	# also switch redis data dir ownership from root to redis
   	chown redis /var/lib/redis
 fi
